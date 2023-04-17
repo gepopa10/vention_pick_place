@@ -1,0 +1,8 @@
+To build:
+colcon build --mixin release --parallel-workers 1
+colcon build --packages-select moveit2_tutorials --mixin release
+
+To launch demo:
+ros2 launch moveit2_tutorials pick_place_demo.launch.py
+
+
