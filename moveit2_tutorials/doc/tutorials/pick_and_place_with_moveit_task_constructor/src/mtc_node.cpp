@@ -15,6 +15,9 @@
 #include <tf2_eigen/tf2_eigen.h>
 #endif
 
+#include <example_interfaces/srv/trigger.hpp>
+#include <memory>
+
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("mtc_tutorial");
 namespace mtc = moveit::task_constructor;
 
@@ -25,15 +28,18 @@ public:
 
   rclcpp::node_interfaces::NodeBaseInterface::SharedPtr getNodeBaseInterface();
 
-  void doTask();
+  void doTask(geometry_msgs::msg::Point end_position);
 
-  void setupPlanningScene();
+  void setupPlanningScene(geometry_msgs::msg::Point start_position);
+  void start_pick_and_place(const std::shared_ptr<example_interfaces::srv::Trigger::Request> request,
+                                       std::shared_ptr<example_interfaces::srv::Trigger::Response> response);
 
 private:
   // Compose an MTC task from a series of stages.
-  mtc::Task createTask();
+  mtc::Task createTask(geometry_msgs::msg::Point end_position);
   mtc::Task task_;
   rclcpp::Node::SharedPtr node_;
+  rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr service_;
 };
 
 rclcpp::node_interfaces::NodeBaseInterface::SharedPtr MTCTaskNode::getNodeBaseInterface()
@@ -44,29 +50,55 @@ rclcpp::node_interfaces::NodeBaseInterface::SharedPtr MTCTaskNode::getNodeBaseIn
 MTCTaskNode::MTCTaskNode(const rclcpp::NodeOptions& options)
   : node_{ std::make_shared<rclcpp::Node>("mtc_node", options) }
 {
+  service_ =
+    node_->create_service<example_interfaces::srv::Trigger>("mtc_node/start_pick_and_place", std::bind(&MTCTaskNode::start_pick_and_place, this, std::placeholders::_1, std::placeholders::_2));
+   
+  std::cout << "created service" << std::endl;
 }
 
-void MTCTaskNode::setupPlanningScene()
+void MTCTaskNode::start_pick_and_place(const std::shared_ptr<example_interfaces::srv::Trigger::Request> /*request*/,
+                                       std::shared_ptr<example_interfaces::srv::Trigger::Response> response)
+{
+  geometry_msgs::msg::Point start_position;
+  start_position.x = 0.5; 
+  start_position.y = -0.25; 
+  start_position.z = 0;
+  
+  geometry_msgs::msg::Point end_position;
+  
+  
+  end_position.x = -0.2; // -0.2
+  end_position.y = 0.5; // 0.5
+  end_position.z = 0;
+      
+  this->setupPlanningScene(start_position);
+  this->doTask(end_position);
+  
+  response->success = true;
+}
+
+void MTCTaskNode::setupPlanningScene(geometry_msgs::msg::Point start_position)
 {
   moveit_msgs::msg::CollisionObject object;
   object.id = "object";
   object.header.frame_id = "world";
   object.primitives.resize(1);
-  object.primitives[0].type = shape_msgs::msg::SolidPrimitive::CYLINDER;
-  object.primitives[0].dimensions = { 0.1, 0.02 };
+  object.primitives[0].type = shape_msgs::msg::SolidPrimitive::BOX;
+  object.primitives[0].dimensions = { 0.05, 0.05, 0.05 };
 
   geometry_msgs::msg::Pose pose;
-  pose.position.x = 0.5;
-  pose.position.y = -0.25;
+  pose.position.x = start_position.x; //0.5
+  pose.position.y = start_position.y; //-0.25
+  pose.position.z = start_position.z; //0
   object.pose = pose;
 
   moveit::planning_interface::PlanningSceneInterface psi;
   psi.applyCollisionObject(object);
 }
 
-void MTCTaskNode::doTask()
+void MTCTaskNode::doTask(geometry_msgs::msg::Point end_position)
 {
-  task_ = createTask();
+  task_ = createTask(end_position);
 
   try
   {
@@ -95,7 +127,7 @@ void MTCTaskNode::doTask()
   return;
 }
 
-mtc::Task MTCTaskNode::createTask()
+mtc::Task MTCTaskNode::createTask(geometry_msgs::msg::Point end_position)
 {
   mtc::Task task;
   task.stages()->setName("demo task");
@@ -286,9 +318,9 @@ mtc::Task MTCTaskNode::createTask()
 
       geometry_msgs::msg::PoseStamped target_pose_msg;
       target_pose_msg.header.frame_id = "object";
-      target_pose_msg.pose.position.y = 0.5;
-      target_pose_msg.pose.position.z = 0.05;
-      target_pose_msg.pose.position.x = -0.2 - 0.5;
+      target_pose_msg.pose.position.y = end_position.y + 0.25;
+      target_pose_msg.pose.position.z = end_position.z + 0.05/2;
+      target_pose_msg.pose.position.x = end_position.x - 0.6;
       
       target_pose_msg.pose.orientation.x = 0;
       target_pose_msg.pose.orientation.y = 0.7071068;
@@ -378,9 +410,6 @@ int main(int argc, char** argv)
     executor.spin();
     executor.remove_node(mtc_task_node->getNodeBaseInterface());
   });
-
-  mtc_task_node->setupPlanningScene();
-  mtc_task_node->doTask();
 
   spin_thread->join();
   rclcpp::shutdown();

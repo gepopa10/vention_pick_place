@@ -233,15 +233,15 @@ void PlanningSceneMonitor::initialize(const planning_scene::PlanningScenePtr& sc
   {
     // Set up publishing parameters
     bool publish_planning_scene =
-        declare_parameter("publish_planning_scene", false, "Set to True to publish Planning Scenes");
-    bool publish_geometry_updates = declare_parameter("publish_geometry_updates", false,
+        declare_parameter("publish_planning_scene", true, "Set to True to publish Planning Scenes");
+    bool publish_geometry_updates = declare_parameter("publish_geometry_updates", true,
                                                       "Set to True to publish geometry updates of the planning scene");
     bool publish_state_updates =
-        declare_parameter("publish_state_updates", false, "Set to True to publish state updates of the planning scene");
+        declare_parameter("publish_state_updates", true, "Set to True to publish state updates of the planning scene");
     bool publish_transform_updates = declare_parameter(
-        "publish_transforms_updates", false, "Set to True to publish transform updates of the planning scene");
+        "publish_transforms_updates", true, "Set to True to publish transform updates of the planning scene");
     double publish_planning_scene_hz = declare_parameter(
-        "publish_planning_scene_hz", 4.0, "Set the maximum frequency at which planning scene updates are published");
+        "publish_planning_scene_hz", 30.0, "Set the maximum frequency at which planning scene updates are published");
     updatePublishSettings(publish_geometry_updates, publish_state_updates, publish_transform_updates,
                           publish_planning_scene, publish_planning_scene_hz);
   }
@@ -257,9 +257,9 @@ void PlanningSceneMonitor::initialize(const planning_scene::PlanningScenePtr& sc
     auto result = rcl_interfaces::msg::SetParametersResult();
     result.successful = true;
 
-    bool publish_planning_scene = false, publish_geometry_updates = false, publish_state_updates = false,
-         publish_transform_updates = false;
-    double publish_planning_scene_hz = 4.0;
+    bool publish_planning_scene = true, publish_geometry_updates = true, publish_state_updates = true,
+         publish_transform_updates = true;
+    double publish_planning_scene_hz = 30.0;
     bool declared_params_valid = pnode_->get_parameter("publish_planning_scene", publish_planning_scene) &&
                                  pnode_->get_parameter("publish_geometry_updates", publish_geometry_updates) &&
                                  pnode_->get_parameter("publish_state_updates", publish_state_updates) &&
