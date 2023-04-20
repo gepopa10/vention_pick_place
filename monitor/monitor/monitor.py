@@ -4,11 +4,13 @@ import tkinter as tk
 import threading
 import numpy as np
 from moveit_msgs.msg import PlanningScene
+from geometry_msgs.msg import Point
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 import tf2_geometry_msgs
 from example_interfaces.srv import Trigger
+from sensor_msgs.msg import JointState
 
 def euler_from_quaternion(quaternion):
     """
@@ -69,10 +71,10 @@ class VectorDisplay(tk.Canvas):
         # Schedule the next update
         self.after(500, self.update_vector)
         
-class Monitor(Node):
+class GUI(Node):
 
     def __init__(self):
-        super().__init__('Monitor')
+        super().__init__('GUI')
         self.subscription = self.create_subscription(
             PlanningScene,
             '/monitored_planning_scene',
@@ -80,12 +82,36 @@ class Monitor(Node):
             10)
         self.subscription  # prevent unused variable warning
         
+        self.subscription_start = self.create_subscription(
+            Point,
+            'mtc_node/start_position',
+            self.listener_start_position_callback,
+            10)
+        self.subscription_start  # prevent unused variable warning
+        
+        self.subscription_end = self.create_subscription(
+            Point,
+            'mtc_node/end_position',
+            self.listener_end_position_callback,
+            10)
+        self.subscription_end  # prevent unused variable warning
+        
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
+        
+        self.joint_publisher_ = self.create_publisher(JointState, '/desired_joint_states', 10)
         
         self.x_raw = 0
         self.y_raw = 0
         self.z_raw = 0
+        
+        self.x_start_position = 0
+        self.y_start_position = 0
+        self.z_start_position = 0
+        
+        self.x_end_position = 0
+        self.y_end_position = 0
+        self.z_end_position = 0
         
         self.cli = self.create_client(Trigger, '/mtc_node/start_pick_and_place')
         while not self.cli.wait_for_service(timeout_sec=1.0):
@@ -96,34 +122,41 @@ class Monitor(Node):
         self.gui_thread.daemon = True
         self.gui_thread.start()
 
-    def button_clicked(self):
+    def pick_button_clicked(self):
         self.start_pick_and_place()
         
+    def move_to_joint(self):
+        msg = JointState()
+        joints = [self.slider1_value.get(), self.slider2_value.get(), self.slider3_value.get(), self.slider4_value.get(), self.slider5_value.get(), self.slider6_value.get(), self.slider7_value.get()]
+        msg.position = joints
+        print("Publishing joints:", joints)
+        self.joint_publisher_.publish(msg)
+                                           
     def run_gui(self):
         self.root = tk.Tk()
         self.root.title("Vention Assignement")
-        
-        # Create a button
-        self.button = tk.Button(self.root, text="Start", command=self.button_clicked, width=20, height=4)
-        self.button.grid(row=0, column=0, padx=20, pady=20)
-        
+                
         # Create a frame to hold the labels and widgets
         self.frame = tk.Frame(self.root)
         self.frame.grid(row=1, column=0)
+        
+        self.frame_pos = tk.Frame(self.frame)
+        self.frame_pos.grid(row=2, column=0)
 
+        #############################################################
         self.x = tk.DoubleVar()
         self.y = tk.DoubleVar()
         self.z = tk.DoubleVar()
         
         # Create labels for each value
-        self.x_label = tk.Label(self.frame, text="X:")
-        self.y_label = tk.Label(self.frame, text="Y:")
-        self.z_label = tk.Label(self.frame, text="Z:")
+        self.x_label = tk.Label(self.frame_pos, text="X:")
+        self.y_label = tk.Label(self.frame_pos, text="Y:")
+        self.z_label = tk.Label(self.frame_pos, text="Z:")
 
         # Create label widgets for each value
-        self.x_widget = tk.Label(self.frame, textvariable=self.x)
-        self.y_widget = tk.Label(self.frame, textvariable=self.y)
-        self.z_widget = tk.Label(self.frame, textvariable=self.z)
+        self.x_widget = tk.Label(self.frame_pos, textvariable=self.x, bg='white')
+        self.y_widget = tk.Label(self.frame_pos, textvariable=self.y, bg='white')
+        self.z_widget = tk.Label(self.frame_pos, textvariable=self.z, bg='white')
 
         # Pack the labels and label widgets in a grid layout
         self.x_label.grid(row=0, column=0, padx=20, pady=20)
@@ -132,17 +165,100 @@ class Monitor(Node):
         self.y_widget.grid(row=1, column=1, padx=20, pady=20)
         self.z_label.grid(row=2, column=0, padx=20, pady=20)
         self.z_widget.grid(row=2, column=1, padx=20, pady=20)
+        #############################################################
+        
+        #############################################################
+        self.x_start_position = tk.DoubleVar()
+        self.y_start_position = tk.DoubleVar()
+        self.z_start_position = tk.DoubleVar()
+        
+        self.x_label_start = tk.Label(self.frame_pos, text="Start X:")
+        self.y_label_start = tk.Label(self.frame_pos, text="Start Y:")
+        self.z_label_start = tk.Label(self.frame_pos, text="Start Z:")
+
+        self.x_widget_start = tk.Label(self.frame_pos, textvariable=self.x_start_position, bg='white')
+        self.y_widget_start = tk.Label(self.frame_pos, textvariable=self.y_start_position, bg='white')
+        self.z_widget_start = tk.Label(self.frame_pos, textvariable=self.z_start_position, bg='white')
+  
+        self.x_label_start.grid(row=0, column=2, padx=20, pady=20)
+        self.x_widget_start.grid(row=0, column=3, padx=20, pady=20)
+        self.y_label_start.grid(row=1, column=2, padx=20, pady=20)
+        self.y_widget_start.grid(row=1, column=3, padx=20, pady=20)
+        self.z_label_start.grid(row=2, column=2, padx=20, pady=20)
+        self.z_widget_start.grid(row=2, column=3, padx=20, pady=20)
+        #############################################################
+        
+        #############################################################
+        self.x_end_position = tk.DoubleVar()
+        self.y_end_position = tk.DoubleVar()
+        self.z_end_position = tk.DoubleVar()
+        
+        self.x_label_end = tk.Label(self.frame_pos, text="End X:")
+        self.y_label_end = tk.Label(self.frame_pos, text="End Y:")
+        self.z_label_end = tk.Label(self.frame_pos, text="End Z:")
+
+        self.x_widget_end = tk.Label(self.frame_pos, textvariable=self.x_end_position, bg='white')
+        self.y_widget_end = tk.Label(self.frame_pos, textvariable=self.y_end_position, bg='white')
+        self.z_widget_end = tk.Label(self.frame_pos, textvariable=self.z_end_position, bg='white')
+  
+        self.x_label_end.grid(row=0, column=4, padx=20, pady=20)
+        self.x_widget_end.grid(row=0, column=5, padx=20, pady=20)
+        self.y_label_end.grid(row=1, column=4, padx=20, pady=20)
+        self.y_widget_end.grid(row=1, column=5, padx=20, pady=20)
+        self.z_label_end.grid(row=2, column=4, padx=20, pady=20)
+        self.z_widget_end.grid(row=2, column=5, padx=20, pady=20)
+        #############################################################
         
         # Create a label for the VectorDisplay
-        vector_label = tk.Label(self.root, text='Vector Display:', font=('Arial', 14))
-        vector_label.grid(row=3, column=0, padx=20, pady=20, sticky='w')
+        self.frame_vec = tk.Frame(self.frame)
+        self.frame_vec.grid(row=2, column=1)
+        vector_label = tk.Label(self.frame_vec, text='Vector Display:', font=('Arial', 14))
+        vector_label.grid(row=0, column=0, padx=0, pady=0)
 
         # Create the VectorDisplay
-        self.vector_display = VectorDisplay(self.root, bg='white')
-        self.vector_display.grid(row=3, column=1, padx=20, pady=20)
+        self.vector_display = VectorDisplay(self.frame_vec, bg='white')
+        self.vector_display.grid(row=0, column=1, padx=0, pady=0)
         
         # Update live data every 500ms
         self.root.after(500, self.update_live_data)
+        
+        self.frame_slider = tk.Frame(self.frame)
+        self.frame_slider.grid(row=4, column=0)
+        self.slider_values = tk.Label(self.frame_slider, text='Joints Values →', font=('Arial', 16))
+        self.slider_values.grid(row=8, column=0, padx=50, pady=1)
+        
+        self.slider1_value = tk.DoubleVar(value=0.0)
+        self.slider2_value = tk.DoubleVar(value=-0.785)
+        self.slider3_value = tk.DoubleVar(value=0.0)
+        self.slider4_value = tk.DoubleVar(value=-2.356)
+        self.slider5_value = tk.DoubleVar(value=0.0)
+        self.slider6_value = tk.DoubleVar(value=1.571)
+        self.slider7_value = tk.DoubleVar(value=0.785)
+        
+        self.slider1 = tk.Scale(self.frame_slider, from_=-3.14, to=3.14, resolution=0.01, orient=tk.HORIZONTAL, length=200, variable=self.slider1_value)
+        self.slider2 = tk.Scale(self.frame_slider, from_=-3.14, to=3.14, resolution=0.01, orient=tk.HORIZONTAL, length=200, variable=self.slider2_value)
+        self.slider3 = tk.Scale(self.frame_slider, from_=-3.14, to=3.14, resolution=0.01, orient=tk.HORIZONTAL, length=200, variable=self.slider3_value)
+        self.slider4 = tk.Scale(self.frame_slider, from_=-3.14, to=3.14, resolution=0.01, orient=tk.HORIZONTAL, length=200, variable=self.slider4_value)
+        self.slider5 = tk.Scale(self.frame_slider, from_=-3.14, to=3.14, resolution=0.01, orient=tk.HORIZONTAL, length=200, variable=self.slider5_value)
+        self.slider6 = tk.Scale(self.frame_slider, from_=-3.14, to=3.14, resolution=0.01, orient=tk.HORIZONTAL, length=200, variable=self.slider6_value)
+        self.slider7 = tk.Scale(self.frame_slider, from_=-3.14, to=3.14, resolution=0.01, orient=tk.HORIZONTAL, length=200, variable=self.slider7_value)
+
+        self.slider1.grid(row=4, column=1, padx=20, pady=1)
+        self.slider2.grid(row=5, column=1, padx=20, pady=1)
+        self.slider3.grid(row=6, column=1, padx=20, pady=1)
+        self.slider4.grid(row=7, column=1, padx=20, pady=1)
+        self.slider5.grid(row=8, column=1, padx=20, pady=1)
+        self.slider6.grid(row=9, column=1, padx=20, pady=1)
+        self.slider7.grid(row=10, column=1, padx=20, pady=1)
+        
+        self.frame_buttons = tk.Frame(self.frame)
+        self.frame_buttons.grid(row=4, column=1)
+        
+        self.button = tk.Button(self.frame_buttons, text="Move to Joints", command=self.move_to_joint, width=20, height=4)
+        self.button.grid(row=0, column=0, padx=20, pady=20)
+        
+        self.button = tk.Button(self.frame_buttons, text="Pick and Place", command=self.pick_button_clicked, width=20, height=4)
+        self.button.grid(row=1, column=0, padx=20, pady=20, sticky='w')
     
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.root.mainloop()
@@ -180,9 +296,9 @@ class Monitor(Node):
         
     def update_live_data(self):
         # Update the live data label with some new data
-        self.x.set(round(self.x_raw, 2))
-        self.y.set(round(self.y_raw, 2))
-        self.z.set(round(self.z_raw, 2))
+        self.x.set(round(self.x_raw, 3))
+        self.y.set(round(self.y_raw, 3))
+        self.z.set(round(self.z_raw, 3))
         # Schedule the next update in 500ms
         self.root.after(500, self.update_live_data)
         
@@ -225,11 +341,21 @@ class Monitor(Node):
         #rclpy.spin_until_future_complete(self, self.future)
         #self.get_logger().info('response: "%s"' % self.future.result())
         #self.get_logger().info('End Pick and Place')
+        
+    def listener_start_position_callback(self, msg):
+        self.x_start_position.set(round(msg.x, 3))
+        self.y_start_position.set(round(msg.y, 3))
+        self.z_start_position.set(round(msg.z, 3))
+        
+    def listener_end_position_callback(self, msg):
+        self.x_end_position.set(round(msg.x, 3))
+        self.y_end_position.set(round(msg.y, 3))
+        self.z_end_position.set(round(msg.z, 3))
 
 def main(args=None):
     rclpy.init(args=args)
 
-    monitor_subscriber = Monitor()
+    monitor_subscriber = GUI()
 
     rclpy.spin(monitor_subscriber)
 

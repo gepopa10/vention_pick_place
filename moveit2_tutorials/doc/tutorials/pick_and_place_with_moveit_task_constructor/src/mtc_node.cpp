@@ -4,6 +4,7 @@
 #include <moveit/task_constructor/task.h>
 #include <moveit/task_constructor/solvers.h>
 #include <moveit/task_constructor/stages.h>
+#include <moveit/move_group_interface/move_group_interface.h>
 #if __has_include(<tf2_geometry_msgs/tf2_geometry_msgs.hpp>)
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #else
@@ -40,6 +41,8 @@ private:
   mtc::Task task_;
   rclcpp::Node::SharedPtr node_;
   rclcpp::Service<example_interfaces::srv::Trigger>::SharedPtr service_;
+  rclcpp::Publisher<geometry_msgs::msg::Point>::SharedPtr start_pos_publisher_;
+  rclcpp::Publisher<geometry_msgs::msg::Point>::SharedPtr end_pos_publisher_;
 };
 
 rclcpp::node_interfaces::NodeBaseInterface::SharedPtr MTCTaskNode::getNodeBaseInterface()
@@ -53,23 +56,26 @@ MTCTaskNode::MTCTaskNode(const rclcpp::NodeOptions& options)
   service_ =
     node_->create_service<example_interfaces::srv::Trigger>("mtc_node/start_pick_and_place", std::bind(&MTCTaskNode::start_pick_and_place, this, std::placeholders::_1, std::placeholders::_2));
    
-  std::cout << "created service" << std::endl;
+  start_pos_publisher_ = node_->create_publisher<geometry_msgs::msg::Point>("mtc_node/start_position", 10);
+  end_pos_publisher_ = node_->create_publisher<geometry_msgs::msg::Point>("mtc_node/end_position", 10);
 }
 
 void MTCTaskNode::start_pick_and_place(const std::shared_ptr<example_interfaces::srv::Trigger::Request> /*request*/,
                                        std::shared_ptr<example_interfaces::srv::Trigger::Response> response)
 {
   geometry_msgs::msg::Point start_position;
-  start_position.x = 0.5; 
-  start_position.y = -0.25; 
-  start_position.z = 0;
+  start_position.x = 0.5;
+  start_position.y = -0.25;
+  start_position.z = 0.05/2;
   
   geometry_msgs::msg::Point end_position;
   
-  
   end_position.x = -0.2; // -0.2
   end_position.y = 0.5; // 0.5
-  end_position.z = 0;
+  end_position.z = 0.05/2;
+  
+  start_pos_publisher_->publish(start_position);
+  end_pos_publisher_->publish(end_position);
       
   this->setupPlanningScene(start_position);
   this->doTask(end_position);
@@ -319,7 +325,7 @@ mtc::Task MTCTaskNode::createTask(geometry_msgs::msg::Point end_position)
       geometry_msgs::msg::PoseStamped target_pose_msg;
       target_pose_msg.header.frame_id = "object";
       target_pose_msg.pose.position.y = end_position.y + 0.25;
-      target_pose_msg.pose.position.z = end_position.z + 0.05/2;
+      target_pose_msg.pose.position.z = 0;
       target_pose_msg.pose.position.x = end_position.x - 0.6;
       
       target_pose_msg.pose.orientation.x = 0;

@@ -62,9 +62,7 @@ def generate_launch_description():
         executable="robot_state_publisher",
         name="robot_state_publisher",
         output="both",
-        parameters=[
-            moveit_config.robot_description,
-        ],
+        parameters=[moveit_config.robot_description],
     )
 
     # ros2_control using FakeSystem as hardware
